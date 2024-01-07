@@ -86,6 +86,8 @@
 #define RAYLIB_VERSION_PATCH 0
 #define RAYLIB_VERSION  "5.1-dev"
 
+#define MAX_NAME_LENGTH 64
+
 // Function specifiers in case library is build/used as a shared library
 // NOTE: Microsoft specifiers to tell compiler that symbols are imported/exported from a .dll
 // NOTE: visibility("default") attribute makes symbols "visible" when compiled with -fvisibility=hidden
@@ -341,6 +343,7 @@ typedef struct Camera2D {
 
 // Mesh, vertex data and vao/vbo
 typedef struct Mesh {
+    char name[MAX_NAME_LENGTH];// Mesh name
     int vertexCount;        // Number of vertices stored in arrays
     int triangleCount;      // Number of triangles stored (indexed or not)
 
@@ -379,6 +382,7 @@ typedef struct MaterialMap {
 
 // Material, includes shader and maps
 typedef struct Material {
+    char name[MAX_NAME_LENGTH];// Material name
     Shader shader;          // Material shader
     MaterialMap *maps;      // Material maps array (MAX_MATERIAL_MAPS)
     float params[4];        // Material generic parameters (if required)
@@ -393,12 +397,13 @@ typedef struct Transform {
 
 // Bone, skeletal animation bone
 typedef struct BoneInfo {
-    char name[32];          // Bone name
+    char name[MAX_NAME_LENGTH];          // Bone name
     int parent;             // Bone parent
 } BoneInfo;
 
 // Model, meshes, materials and animation data
 typedef struct Model {
+    char name[MAX_NAME_LENGTH];             // Model name
     Matrix transform;       // Local transform matrix
 
     int meshCount;          // Number of meshes

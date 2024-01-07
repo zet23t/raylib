@@ -57,6 +57,7 @@
 #include <stdlib.h>         // Required for: malloc(), calloc(), free()
 #include <string.h>         // Required for: memcmp(), strlen(), strncpy()
 #include <math.h>           // Required for: sinf(), cosf(), sqrtf(), fabsf()
+#include <memory.h>         // Required for: memcpy()
 
 #if defined(SUPPORT_FILEFORMAT_OBJ) || defined(SUPPORT_FILEFORMAT_MTL)
     #define TINYOBJ_MALLOC RL_MALLOC
@@ -4971,6 +4972,9 @@ static Model LoadGLTF(const char *fileName)
         {
             model.materials[j] = LoadMaterialDefault();
             const char *texPath = GetDirectoryPath(fileName);
+            char *srcName = data->materials[i].name;
+            char *dstName = model.materials[j].name;
+            strncpy(dstName, srcName, MAX_NAME_LENGTH);
 
             // Check glTF material flow: PBR metallic/roughness flow
             // NOTE: Alternatively, materials can follow PBR specular/glossiness flow
@@ -5066,6 +5070,7 @@ static Model LoadGLTF(const char *fileName)
                 // Other alternatives: points, lines, line_strip, triangle_strip
                 if (data->meshes[i].primitives[p].type != cgltf_primitive_type_triangles) continue;
 
+                strncpy(model.meshes[meshIndex].name, data->meshes[i].name, MAX_NAME_LENGTH);
                 // NOTE: Attributes data could be provided in several data formats (8, 8u, 16u, 32...),
                 // Only some formats for each attribute type are supported, read info at the top of this function!
 
