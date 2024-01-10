@@ -3310,6 +3310,47 @@ static void ScanDirectoryFilesRecursively(const char *basePath, FilePathList *fi
     else TRACELOG(LOG_WARNING, "FILEIO: Directory cannot be opened (%s)", basePath);
 }
 
+// Scan all files and directories recursively from a base path
+void* ScanDirectoryFilesRecursivelyCallback(const char *basePath, void* (*fileCallback)(const char *filename, int isDir, void *userdata), void *userdata) 
+{
+    char path[MAX_FILEPATH_LENGTH] = { 0 };
+    memset(path, 0, MAX_FILEPATH_LENGTH);
+
+    struct dirent *dp = NULL;
+    DIR *dir = opendir(basePath);
+
+    if (dir != NULL)
+    {
+        while (((dp = readdir(dir)) != NULL))
+        {
+            if ((strcmp(dp->d_name, ".") != 0) && (strcmp(dp->d_name, "..") != 0))
+            {
+                // Construct new path from our base path
+            #if defined(_WIN32)
+                sprintf(path, "%s\\%s", basePath, dp->d_name);
+            #else
+                sprintf(path, "%s/%s", basePath, dp->d_name);
+            #endif
+                int isDir = !IsPathFile(path);
+                void *result = fileCallback(path, isDir, userdata);
+                
+                if (isDir && result == NULL)
+                {
+                    result = ScanDirectoryFilesRecursivelyCallback(path, fileCallback, userdata);
+                }
+
+                if (result != 0) {
+                    return result;
+                }
+            }
+        }
+
+        closedir(dir);
+    }
+    else TRACELOG(LOG_WARNING, "FILEIO: Directory cannot be opened (%s)", basePath);
+    return NULL;
+}
+
 #if defined(SUPPORT_AUTOMATION_EVENTS)
 // Automation event recording
 // NOTE: Recording is by default done at EndDrawing(), before PollInputEvents()

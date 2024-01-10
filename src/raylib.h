@@ -1136,6 +1136,7 @@ RLAPI bool IsPathFile(const char *path);                          // Check if a 
 RLAPI FilePathList LoadDirectoryFiles(const char *dirPath);       // Load directory filepaths
 RLAPI FilePathList LoadDirectoryFilesEx(const char *basePath, const char *filter, bool scanSubdirs); // Load directory filepaths with extension filtering and recursive directory scan
 RLAPI void UnloadDirectoryFiles(FilePathList files);              // Unload filepaths
+RLAPI void* ScanDirectoryFilesRecursivelyCallback(const char *basePath, void* (*fileCallback)(const char *filename, int isDir, void *userdata), void *userdata); // Scan directory recursively and call a function for each found file or directory found. If the return value is not NULL, it will stop the iteration and return that value.
 RLAPI bool IsFileDropped(void);                                   // Check if a file has been dropped into window
 RLAPI FilePathList LoadDroppedFiles(void);                        // Load dropped filepaths
 RLAPI void UnloadDroppedFiles(FilePathList files);                // Unload dropped filepaths
