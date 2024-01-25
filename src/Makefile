@@ -61,8 +61,14 @@ RAYLIB_API_VERSION    = 500
 RAYLIB_SRC_PATH      ?= ../src
 
 # Define output directory for compiled library, defaults to src directory
-# NOTE: If externally provided, make sure directory exists
-RAYLIB_RELEASE_PATH  ?= $(RAYLIB_SRC_PATH)
+# Determine the release path based on the platform
+ifeq ($(PLATFORM),PLATFORM_WEB)
+    RAYLIB_RELEASE_PATH = ../release/web
+else
+    RAYLIB_RELEASE_PATH = ../release/desktop
+endif
+
+$(shell mkdir -p $(RAYLIB_RELEASE_PATH))
 
 # Library type used for raylib: STATIC (.a) or SHARED (.so/.dll)
 RAYLIB_LIBTYPE       ?= STATIC
