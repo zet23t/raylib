@@ -323,6 +323,8 @@ typedef struct Camera3D {
     Vector3 up;             // Camera up vector (rotation over its axis)
     float fovy;             // Camera field-of-view aperture in Y (degrees) in perspective, used as near plane width in orthographic
     int projection;         // Camera projection: CAMERA_PERSPECTIVE or CAMERA_ORTHOGRAPHIC
+    float near;             // Camera near plane plane distance
+    float far;              // Camera far plane distance
 } Camera3D;
 
 typedef Camera3D Camera;    // Camera type fallback, defaults to Camera3D
@@ -333,6 +335,8 @@ typedef struct Camera2D {
     Vector2 target;         // Camera target (rotation and zoom origin)
     float rotation;         // Camera rotation in degrees
     float zoom;             // Camera zoom (scaling), should be 1.0f by default
+    float near;             // Camera near plane distance (Z)
+    float far;              // Camera far plane distance (Z)
 } Camera2D;
 
 // Mesh, vertex data and vao/vbo

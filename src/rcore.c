@@ -992,10 +992,10 @@ void BeginMode3D(Camera camera)
     if (camera.projection == CAMERA_PERSPECTIVE)
     {
         // Setup perspective projection
-        double top = rlGetCullDistanceNear()*tan(camera.fovy*0.5*DEG2RAD);
+        double top = camera.near*tan(camera.fovy*0.5*DEG2RAD);
         double right = top*aspect;
 
-        rlFrustum(-right, right, -top, top, rlGetCullDistanceNear(), rlGetCullDistanceFar());
+        rlFrustum(-right, right, -top, top, camera.near, camera.far);
     }
     else if (camera.projection == CAMERA_ORTHOGRAPHIC)
     {
@@ -1003,7 +1003,7 @@ void BeginMode3D(Camera camera)
         double top = camera.fovy/2.0;
         double right = top*aspect;
 
-        rlOrtho(-right, right, -top,top, rlGetCullDistanceNear(), rlGetCullDistanceFar());
+        rlOrtho(-right, right, -top,top, camera.near, camera.far);
     }
 
     rlMatrixMode(RL_MODELVIEW);     // Switch back to modelview matrix
@@ -1446,7 +1446,7 @@ Ray GetScreenToWorldRayEx(Vector2 position, Camera camera, int width, int height
     if (camera.projection == CAMERA_PERSPECTIVE)
     {
         // Calculate projection matrix from perspective
-        matProj = MatrixPerspective(camera.fovy*DEG2RAD, ((double)width/(double)height), rlGetCullDistanceNear(), rlGetCullDistanceFar());
+        matProj = MatrixPerspective(camera.fovy*DEG2RAD, ((double)width/(double)height), camera.near, camera.far);
     }
     else if (camera.projection == CAMERA_ORTHOGRAPHIC)
     {
@@ -1533,7 +1533,7 @@ Vector2 GetWorldToScreenEx(Vector3 position, Camera camera, int width, int heigh
     if (camera.projection == CAMERA_PERSPECTIVE)
     {
         // Calculate projection matrix from perspective
-        matProj = MatrixPerspective(camera.fovy*DEG2RAD, ((double)width/(double)height), rlGetCullDistanceNear(), rlGetCullDistanceFar());
+        matProj = MatrixPerspective(camera.fovy*DEG2RAD, ((double)width/(double)height), camera.near, camera.far);
     }
     else if (camera.projection == CAMERA_ORTHOGRAPHIC)
     {
@@ -1542,7 +1542,7 @@ Vector2 GetWorldToScreenEx(Vector3 position, Camera camera, int width, int heigh
         double right = top*aspect;
 
         // Calculate projection matrix from orthographic
-        matProj = MatrixOrtho(-right, right, -top, top, rlGetCullDistanceNear(), rlGetCullDistanceFar());
+        matProj = MatrixOrtho(-right, right, -top, top, camera.near, camera.far);
     }
 
     // Calculate view matrix from camera look at (and transpose it)
