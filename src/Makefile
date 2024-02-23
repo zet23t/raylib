@@ -60,16 +60,6 @@ RAYLIB_API_VERSION    = 500
 # Define raylib source code path
 RAYLIB_SRC_PATH      ?= ../src
 
-# Define output directory for compiled library, defaults to src directory
-# Determine the release path based on the platform
-ifeq ($(PLATFORM),PLATFORM_WEB)
-    RAYLIB_RELEASE_PATH = ../release/web
-else
-    RAYLIB_RELEASE_PATH = ../release/desktop
-endif
-
-$(shell mkdir -p $(RAYLIB_RELEASE_PATH))
-
 # Library type used for raylib: STATIC (.a) or SHARED (.so/.dll)
 RAYLIB_LIBTYPE       ?= STATIC
 
@@ -81,6 +71,13 @@ RAYLIB_LIB_NAME      ?= raylib
 
 # Define resource file for DLL properties
 RAYLIB_RES_FILE      ?= ./raylib.dll.rc.data
+
+# Define output directory for compiled library, defaults to src directory
+# Determine the release path based on the platform
+RAYLIB_RELEASE_PATH = ../$(RAYLIB_BUILD_MODE)/$(PLATFORM)
+RAYLIB_RELEASE_PATH := $(shell echo $(RAYLIB_RELEASE_PATH) | tr A-Z a-z)
+
+$(shell mkdir -p $(RAYLIB_RELEASE_PATH))
 
 # Define external config flags
 # NOTE: It will override config.h flags with the provided ones,
