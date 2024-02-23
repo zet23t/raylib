@@ -610,6 +610,8 @@ ifeq ($(PLATFORM),PLATFORM_ANDROID)
     OBJS += android_native_app_glue.o
 endif
 
+OBJS := $(addprefix $(RAYLIB_RELEASE_PATH)/, $(OBJS))
+
 # Define processes to execute
 #------------------------------------------------------------------------------------------------
 # Default target entry
@@ -682,44 +684,44 @@ endif
 # Compile all modules with their prerequisites
 
 # Prerequisites of core module
-rcore.o : platforms/*.c
+$(RAYLIB_RELEASE_PATH)/rcore.o : platforms/*.c
 
 # Compile core module
-rcore.o : rcore.c raylib.h rlgl.h utils.h raymath.h rcamera.h rgestures.h
-	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS)
+$(RAYLIB_RELEASE_PATH)/rcore.o : rcore.c raylib.h rlgl.h utils.h raymath.h rcamera.h rgestures.h
+	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS) -o $@
 
 # Compile rglfw module
-rglfw.o : rglfw.c
-	$(CC) $(GLFW_OSX) -c $< $(CFLAGS) $(INCLUDE_PATHS)
+$(RAYLIB_RELEASE_PATH)/rglfw.o : rglfw.c
+	$(CC) $(GLFW_OSX) -c $< $(CFLAGS) $(INCLUDE_PATHS) -o $@
 
 # Compile shapes module
-rshapes.o : rshapes.c raylib.h rlgl.h
-	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS)
+$(RAYLIB_RELEASE_PATH)/rshapes.o : rshapes.c raylib.h rlgl.h
+	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS) -o $@
 
 # Compile textures module
-rtextures.o : rtextures.c raylib.h rlgl.h utils.h
-	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS)
+$(RAYLIB_RELEASE_PATH)/rtextures.o : rtextures.c raylib.h rlgl.h utils.h
+	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS) -o $@
 
 # Compile text module
-rtext.o : rtext.c raylib.h utils.h
-	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS)
+$(RAYLIB_RELEASE_PATH)/rtext.o : rtext.c raylib.h utils.h
+	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS) -o $@
 
 # Compile utils module
-utils.o : utils.c utils.h
-	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS)
+$(RAYLIB_RELEASE_PATH)/utils.o : utils.c utils.h
+	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS) -o $@
 
 # Compile models module
-rmodels.o : rmodels.c raylib.h rlgl.h raymath.h
-	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS)
+$(RAYLIB_RELEASE_PATH)/rmodels.o : rmodels.c raylib.h rlgl.h raymath.h
+	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS) -o $@
 
 # Compile audio module
-raudio.o : raudio.c raylib.h
-	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS)
+$(RAYLIB_RELEASE_PATH)/raudio.o : raudio.c raylib.h
+	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS) -o $@
 
 # Compile raygui module
 # NOTE: raygui header should be distributed with raylib.h
-raygui.o : raygui.c
-	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS)
+$(RAYLIB_RELEASE_PATH)/raygui.o : raygui.c
+	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS) -o $@
 raygui.c:
 ifeq ($(PLATFORM_SHELL), cmd)
 	@echo #define RAYGUI_IMPLEMENTATION > raygui.c
@@ -730,8 +732,8 @@ else
 endif
 
 # Compile android_native_app_glue module
-android_native_app_glue.o : $(NATIVE_APP_GLUE)/android_native_app_glue.c
-	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS)
+$(RAYLIB_RELEASE_PATH)/android_native_app_glue.o : $(NATIVE_APP_GLUE)/android_native_app_glue.c
+	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS) -o $@
 
 # Install generated and needed files to desired directories.
 # On GNU/Linux and BSDs, there are some standard directories that contain extra
