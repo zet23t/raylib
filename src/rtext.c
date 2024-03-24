@@ -442,6 +442,7 @@ Font LoadFontFromImage(Image image, Color key, int firstChar)
     int charHeight = 0;
     int j = 0;
 
+    // note: this will segfault when the column doesn't contain the key color; 
     while (!COLOR_EQUAL(pixels[(lineSpacing + j)*image.width + charSpacing], key)) j++;
 
     charHeight = j;
@@ -480,6 +481,9 @@ Font LoadFontFromImage(Image image, Color key, int firstChar)
 
     // NOTE: We need to remove key color borders from image to avoid weird
     // artifacts on texture scaling when using TEXTURE_FILTER_BILINEAR or TEXTURE_FILTER_TRILINEAR
+
+    // note: this could still trigger color banding when rgba=1,1,1,1 blends to rgba=0,0,0,0; could be fixed by
+    // assigning rgb the nearest color value of an opaque pixel. A bit difficult & expensive.
     for (int i = 0; i < image.height*image.width; i++) if (COLOR_EQUAL(pixels[i], key)) pixels[i] = BLANK;
 
     // Create a new image with the processed color data (key color replaced by BLANK)
