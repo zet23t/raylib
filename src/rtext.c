@@ -1263,6 +1263,12 @@ void SetTextLineSpacing(int spacing)
     textLineSpacing = spacing;
 }
 
+// returns the vertical line spacing
+int GetTextLineSpacing()
+{
+    return textLineSpacing;
+}
+
 // Measure string width for default font
 int MeasureText(const char *text, int fontSize)
 {
