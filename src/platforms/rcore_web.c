@@ -1308,7 +1308,9 @@ int InitPlatform(void)
     glfwSetKeyCallback(platform.handle, KeyCallback);
     glfwSetCharCallback(platform.handle, CharCallback);
     glfwSetMouseButtonCallback(platform.handle, MouseButtonCallback);
-    glfwSetCursorPosCallback(platform.handle, MouseMoveCallback);
+    // For some reason, GLFW mouse inputs are not properly working
+    // Using emscripten mouse inputs instead (which was formerly ignored in favor of GLFW)
+    // glfwSetCursorPosCallback(platform.handle, MouseMoveCallback);
     glfwSetScrollCallback(platform.handle, MouseScrollCallback);
     glfwSetCursorEnterCallback(platform.handle, MouseEnterCallback);
 
@@ -1645,11 +1647,28 @@ static EM_BOOL EmscriptenMouseMoveCallback(int eventType, const EmscriptenMouseE
         CORE.Input.Mouse.previousPosition.x = lockedMousePos.x - mouseEvent->movementX;
         CORE.Input.Mouse.previousPosition.y = lockedMousePos.y - mouseEvent->movementY;
     }
+    else
+    {
+        // canvasX and canvasY are 0 0 (no idea why) - clientX and clientY are provided but are 
+        // not relative to the canvas, so we have to obtain the top-left corner of the canvas
+        // Moreover, the canvas size can be different from the window size, so we have to normalize
+        // the mouse position to the window size to make sure it's correct
+        double canvasLeft = EM_ASM_DOUBLE( return Module.canvas.getBoundingClientRect().left; );
+        double canvasTop = EM_ASM_DOUBLE( return Module.canvas.getBoundingClientRect().top; );
+        double canvasRight = EM_ASM_DOUBLE( return Module.canvas.getBoundingClientRect().right; );
+        double canvasBottom = EM_ASM_DOUBLE( return Module.canvas.getBoundingClientRect().bottom; );
 
+        double normalizedX = (mouseEvent->clientX - canvasLeft) / (canvasRight - canvasLeft);
+        double normalizedY = (mouseEvent->clientY - canvasTop) / (canvasBottom - canvasTop);
+
+        CORE.Input.Mouse.currentPosition.x = (float) (normalizedX * CORE.Window.screen.width);
+        CORE.Input.Mouse.currentPosition.y = (float) (normalizedY * CORE.Window.screen.height);
+    }
+    
     return 1; // The event was consumed by the callback handler
 }
 
-// Emscripten: Called on pointer lock events
+// Register pointer lock events
 static EM_BOOL EmscriptenPointerlockCallback(int eventType, const EmscriptenPointerlockChangeEvent *pointerlockChangeEvent, void *userData)
 {
     CORE.Input.Mouse.cursorHidden = EM_ASM_INT( { if (document.pointerLockElement) return 1; }, 0);
@@ -1799,28 +1818,32 @@ static EM_BOOL EmscriptenResizeCallback(int eventType, const EmscriptenUiEvent *
 
     // This event is called whenever the window changes sizes,
     // so the size of the canvas object is explicitly retrieved below
-    int width = EM_ASM_INT( return window.innerWidth; );
-    int height = EM_ASM_INT( return window.innerHeight; );
+    int windowWidth = EM_ASM_INT( return window.innerWidth; );
+    int windowHeight = EM_ASM_INT( return window.innerHeight; );
+    int canvasWidth = EM_ASM_INT( return Module.canvas.width; );
+    int canvasHeight = EM_ASM_INT( return Module.canvas.height; );
 
-    if (width < (int)CORE.Window.screenMin.width) width = CORE.Window.screenMin.width;
-    else if ((width > (int)CORE.Window.screenMax.width) && (CORE.Window.screenMax.width > 0)) width = CORE.Window.screenMax.width;
+    if (windowWidth < (int)CORE.Window.screenMin.width) windowWidth = CORE.Window.screenMin.width;
+    else if ((windowWidth > (int)CORE.Window.screenMax.width) && (CORE.Window.screenMax.width > 0)) windowWidth = CORE.Window.screenMax.width;
 
-    if (height < (int)CORE.Window.screenMin.height) height = CORE.Window.screenMin.height;
-    else if ((height > (int)CORE.Window.screenMax.height) && (CORE.Window.screenMax.height > 0)) height = CORE.Window.screenMax.height;
+    if (windowHeight < (int)CORE.Window.screenMin.height) windowHeight = CORE.Window.screenMin.height;
+    else if ((windowHeight > (int)CORE.Window.screenMax.height) && (CORE.Window.screenMax.height > 0)) windowHeight = CORE.Window.screenMax.height;
 
-    emscripten_set_canvas_element_size(GetCanvasId(), width, height);
+    if (IsWindowFullscreen()) {
+        canvasWidth = windowWidth;
+        canvasHeight = windowHeight;
+    }
+    emscripten_set_canvas_element_size(GetCanvasId(), canvasWidth, canvasHeight);
 
-    SetupViewport(width, height); // Reset viewport and projection matrix for new size
+    SetupViewport(canvasWidth, canvasHeight); // Reset viewport and projection matrix for new size
 
-    CORE.Window.currentFbo.width = width;
-    CORE.Window.currentFbo.height = height;
+    CORE.Window.currentFbo.width = canvasWidth;
+    CORE.Window.currentFbo.height = canvasHeight;
     CORE.Window.resizedLastFrame = true;
 
-    if (IsWindowFullscreen()) return 1;
-
     // Set current screen size
-    CORE.Window.screen.width = width;
-    CORE.Window.screen.height = height;
+    CORE.Window.screen.width = canvasWidth;
+    CORE.Window.screen.height = canvasHeight;
 
     // NOTE: Postprocessing texture is not scaled to new size
 
