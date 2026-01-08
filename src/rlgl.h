@@ -1853,11 +1853,16 @@ unsigned int rlGetActiveFramebuffer(void)
     return fboId;
 }
 
+#define WARN_ONCE(what) static int hasWarned = 0; \
+                  if (!hasWarned) { TRACELOG(RL_LOG_ERROR, what); hasWarned = 1; }
+
 // Disable rendering to texture
 void rlDisableFramebuffer(void)
 {
 #if (defined(GRAPHICS_API_OPENGL_33) || defined(GRAPHICS_API_OPENGL_ES2)) && defined(RLGL_RENDER_TEXTURES_HINT)
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+#else
+    WARN_ONCE("rlDisableFramebuffer() not supported");
 #endif
 }
 
@@ -1866,6 +1871,8 @@ void rlBlitFramebuffer(int srcX, int srcY, int srcWidth, int srcHeight, int dstX
 {
 #if (defined(GRAPHICS_API_OPENGL_33) || defined(GRAPHICS_API_OPENGL_ES3)) && defined(RLGL_RENDER_TEXTURES_HINT)
     glBlitFramebuffer(srcX, srcY, srcWidth, srcHeight, dstX, dstY, dstWidth, dstHeight, bufferMask, GL_NEAREST);
+#else
+    WARN_ONCE("rlBlitFramebuffer() not supported");
 #endif
 }
 
@@ -1874,6 +1881,8 @@ void rlBindFramebuffer(unsigned int target, unsigned int framebuffer)
 {
 #if (defined(GRAPHICS_API_OPENGL_33) || defined(GRAPHICS_API_OPENGL_ES2)) && defined(RLGL_RENDER_TEXTURES_HINT)
     glBindFramebuffer(target, framebuffer);
+#else
+    WARN_ONCE("rlBindFramebuffer() not supported");
 #endif
 }
 
