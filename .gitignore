@@ -119,3 +119,5 @@ tools/rexm/rexm
 # CI
 emsdk-cache/
 raylib.com/
+
+src/external/SDL2
