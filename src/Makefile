@@ -60,7 +60,14 @@
 # Define required environment variables
 #------------------------------------------------------------------------------------------------
 # Define target platform
-PLATFORM             ?= PLATFORM_DESKTOP
+ifeq ($(origin PLATFORM), undefined)
+    ifneq ($(strip $(PLATFORM_TARGET)),)
+        PLATFORM     = $(PLATFORM_TARGET)
+    else
+        PLATFORM     = PLATFORM_DESKTOP
+    endif
+endif
+
 ifeq ($(PLATFORM), PLATFORM_DESKTOP)
     TARGET_PLATFORM   = PLATFORM_DESKTOP_GLFW
 else
