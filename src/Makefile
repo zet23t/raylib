@@ -271,9 +271,9 @@ ifeq ($(TARGET_PLATFORM),PLATFORM_DRM)
     GRAPHICS = GRAPHICS_API_OPENGL_ES2
 endif
 ifeq ($(TARGET_PLATFORM),$(filter $(TARGET_PLATFORM),PLATFORM_WEB PLATFORM_WEB_RGFW))
-    # On HTML5 OpenGL ES 2.0 is used, emscripten translates it to WebGL 1.0
-    GRAPHICS = GRAPHICS_API_OPENGL_ES2
-    #GRAPHICS = GRAPHICS_API_OPENGL_ES3
+    # On HTML5 OpenGL ES 3.0 is used, emscripten translates it to WebGL 2.0
+    GRAPHICS = GRAPHICS_API_OPENGL_ES3
+    #GRAPHICS = GRAPHICS_API_OPENGL_ES2
 endif
 ifeq ($(TARGET_PLATFORM),PLATFORM_ANDROID)
     # By default use OpenGL ES 2.0 on Android
