@@ -414,7 +414,12 @@ void SetWindowMaxSize(int width, int height)
 // Set window dimensions
 void SetWindowSize(int width, int height)
 {
-    TRACELOG(LOG_WARNING, "SetWindowSize() not available on target platform");
+    CORE.Window.screen.width = width;
+    CORE.Window.screen.height = height;
+    CORE.Window.render.width = width;
+    CORE.Window.render.height = height;
+    CORE.Window.currentFbo.width = width;
+    CORE.Window.currentFbo.height = height;
 }
 
 // Set window opacity, value opacity is between 0.0 and 1.0
@@ -716,7 +721,10 @@ void PollInputEvents(void)
 
     // Poll Events (registered events) until we reach TIMEOUT which indicates there are no events left to poll
     // NOTE: Activity is paused if not enabled (platform.appEnabled)
-    while ((pollResult = ALooper_pollOnce(platform.appEnabled? 0 : -1, NULL, &pollEvents, ((void **)&platform.source)) > ALOOPER_POLL_TIMEOUT))
+    // Always non-blocking to support split-screen/popup transitions where the window
+    // is briefly destroyed and recreated. Game code handles pausing when appropriate.
+    int pollTimeout = 0;
+    while ((pollResult = ALooper_pollOnce(pollTimeout, NULL, &pollEvents, ((void **)&platform.source)) > ALOOPER_POLL_TIMEOUT))
     {
         // Process this event
         if (platform.source != NULL) platform.source->process(platform.app, platform.source);
@@ -1293,9 +1301,18 @@ static int32_t AndroidInputCallback(struct android_app *app, AInputEvent *event)
         // Register touch points position
         touchRaw.position[i] = (Vector2){ AMotionEvent_getX(event, i), AMotionEvent_getY(event, i) };
 
-        // Normalize CORE.Input.Touch.position[i] for CORE.Window.screen.width and CORE.Window.screen.height
-        float widthRatio = (float)(CORE.Window.screen.width + CORE.Window.renderOffset.x)/(float)CORE.Window.display.width;
-        float heightRatio = (float)(CORE.Window.screen.height + CORE.Window.renderOffset.y)/(float)CORE.Window.display.height;
+        // Normalize touch position for screen dimensions.
+        // AMotionEvent_getX/Y returns window-relative coordinates.
+        // Use the actual native window size for normalization so it works
+        // correctly in popup/split-screen when window != display.
+        int windowWidth = (platform.app && platform.app->window) ?
+            ANativeWindow_getWidth(platform.app->window) : CORE.Window.display.width;
+        int windowHeight = (platform.app && platform.app->window) ?
+            ANativeWindow_getHeight(platform.app->window) : CORE.Window.display.height;
+        float widthRatio = (windowWidth > 0) ?
+            (float)(CORE.Window.screen.width + CORE.Window.renderOffset.x)/(float)windowWidth : 1.0f;
+        float heightRatio = (windowHeight > 0) ?
+            (float)(CORE.Window.screen.height + CORE.Window.renderOffset.y)/(float)windowHeight : 1.0f;
         touchRaw.position[i].x = touchRaw.position[i].x*widthRatio - (float)CORE.Window.renderOffset.x/2;
         touchRaw.position[i].y = touchRaw.position[i].y*heightRatio - (float)CORE.Window.renderOffset.y/2;
     }
