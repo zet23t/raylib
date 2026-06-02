@@ -1099,10 +1099,13 @@ Vector2 GetWindowScaleDPI(void)
     Vector2 scale = { 1.0f, 1.0f };
 
 #ifndef PLATFORM_DESKTOP_SDL3
-    // NOTE: SDL_GetWindowDisplayScale was only added on SDL3
-    //       see https://wiki.libsdl.org/SDL3/SDL_GetWindowDisplayScale
-    // TODO: Implement the window scale factor calculation manually
-    TRACELOG(LOG_WARNING, "GetWindowScaleDPI() not implemented on target platform");
+    // SDL2: derive DPI scale from GL drawable size vs logical window size.
+    // On macOS Retina this gives 2.0; on regular displays it gives 1.0.
+    int drawW = 0, drawH = 0, winW = 0, winH = 0;
+    SDL_GL_GetDrawableSize(platform.window, &drawW, &drawH);
+    SDL_GetWindowSize(platform.window, &winW, &winH);
+    if (winW > 0) scale.x = (float)drawW / (float)winW;
+    if (winH > 0) scale.y = (float)drawH / (float)winH;
 #else
     scale.x = SDL_GetWindowDisplayScale(platform.window);
     scale.y = scale.x;
