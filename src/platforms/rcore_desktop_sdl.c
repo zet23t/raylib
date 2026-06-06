@@ -81,7 +81,7 @@
 // Defines and Macros
 //----------------------------------------------------------------------------------
 #ifndef MAX_CLIPBOARD_BUFFER_LENGTH
-    #define MAX_CLIPBOARD_BUFFER_LENGTH 1024 // Size of the clipboard buffer used on GetClipboardText()
+    #define MAX_CLIPBOARD_BUFFER_LENGTH 0x10000 // Size of the clipboard buffer used on GetClipboardText()
 #endif
 
 #if ((defined(SDL_MAJOR_VERSION) && (SDL_MAJOR_VERSION == 3)) && (defined(SDL_MINOR_VERSION) && (SDL_MINOR_VERSION >= 1)))
