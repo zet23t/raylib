@@ -7819,6 +7819,16 @@ return {
       returnType = "bool"
     },
     {
+      name = "PauseAudioDevice",
+      description = "Stop the playback device's callback thread; safe no-op if not initialized or already paused",
+      returnType = "void"
+    },
+    {
+      name = "ResumeAudioDevice",
+      description = "Restart a device paused with PauseAudioDevice(); safe no-op if not initialized or not paused",
+      returnType = "void"
+    },
+    {
       name = "SetMasterVolume",
       description = "Set master volume (listener)",
       returnType = "void",
