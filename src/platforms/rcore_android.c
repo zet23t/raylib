@@ -1084,14 +1084,14 @@ static void AndroidCommandCallback(struct android_app *app, int32_t cmd)
         {
             platform.appEnabled = true;
             CORE.Window.flags &= ~FLAG_WINDOW_UNFOCUSED;
-            //ResumeMusicStream();
+            ResumeAudioDevice();
         } break;
         case APP_CMD_PAUSE: break;
         case APP_CMD_LOST_FOCUS:
         {
             platform.appEnabled = false;
             CORE.Window.flags |= FLAG_WINDOW_UNFOCUSED;
-            //PauseMusicStream();
+            PauseAudioDevice();
         } break;
         case APP_CMD_TERM_WINDOW:
         {

@@ -382,6 +382,7 @@ typedef struct AudioData {
         ma_device device;           // miniaudio device
         ma_mutex lock;              // miniaudio mutex lock
         bool isReady;               // Check if audio device is ready
+        bool isPaused;              // Set by PauseAudioDevice()/cleared by ResumeAudioDevice(); the device itself keeps running the whole time otherwise (see InitAudioDevice())
         size_t pcmBufferSize;       // Pre-allocated buffer size
         void *pcmBuffer;            // Pre-allocated buffer to read audio data from file/memory
     } System;
@@ -544,6 +545,30 @@ void CloseAudioDevice(void)
 bool IsAudioDeviceReady(void)
 {
     return AUDIO.System.isReady;
+}
+
+void PauseAudioDevice(void)
+{
+    if (!AUDIO.System.isReady || AUDIO.System.isPaused) return;
+
+    if (ma_device_stop(&AUDIO.System.device) != MA_SUCCESS)
+    {
+        TRACELOG(LOG_WARNING, "AUDIO: Failed to pause playback device");
+        return;
+    }
+    AUDIO.System.isPaused = true;
+}
+
+void ResumeAudioDevice(void)
+{
+    if (!AUDIO.System.isReady || !AUDIO.System.isPaused) return;
+
+    if (ma_device_start(&AUDIO.System.device) != MA_SUCCESS)
+    {
+        TRACELOG(LOG_WARNING, "AUDIO: Failed to resume playback device");
+        return;
+    }
+    AUDIO.System.isPaused = false;
 }
 
 // Set master volume (listener)

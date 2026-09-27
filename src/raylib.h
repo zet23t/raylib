@@ -1636,6 +1636,8 @@ typedef void (*AudioCallback)(void *bufferData, unsigned int frames);
 RLAPI void InitAudioDevice(void);                                     // Initialize audio device and context
 RLAPI void CloseAudioDevice(void);                                    // Close the audio device and context
 RLAPI bool IsAudioDeviceReady(void);                                  // Check if audio device has been initialized successfully
+RLAPI void PauseAudioDevice(void);                                    // Stop the playback device's callback thread; safe no-op if not initialized or already paused
+RLAPI void ResumeAudioDevice(void);                                   // Restart a device paused with PauseAudioDevice(); safe no-op if not initialized or not paused
 RLAPI void SetMasterVolume(float volume);                             // Set master volume (listener)
 RLAPI float GetMasterVolume(void);                                    // Get master volume (listener)
 
