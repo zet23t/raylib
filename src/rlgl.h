@@ -756,6 +756,15 @@ RLAPI void rlSetTexture(unsigned int id);               // Set current texture f
 RLAPI rlFrameStats rlGetFrameStats(void);               // Get the (ever growing) GL submission counters
 RLAPI void rlSetBatchFlushCallbacks(rlBatchFlushCallback onBegin, rlBatchFlushCallback onEnd); // Set (or clear with NULL) the batch flush callbacks
 
+// GPU timer: how long the GPU takes for the commands between rlGpuTimerBegin() and rlGpuTimerEnd(),
+// read back a few frames later without stalling (time elapsed queries: GL 3.3, or GLES with
+// GL_EXT_disjoint_timer_query; not on web, where browsers do not offer it)
+#define RLGL_HAS_GPU_TIMER 1
+RLAPI bool rlGpuTimerIsSupported(void);                 // Check (once, then cached) whether GPU timing is available
+RLAPI bool rlGpuTimerBegin(void);                       // Start a measurement; false when unsupported or every query is still waiting for its result
+RLAPI void rlGpuTimerEnd(void);                         // End the running measurement
+RLAPI int rlGpuTimerCollect(double *outMs);             // Oldest measurement: 1 = its milliseconds in outMs, -1 = it was discarded (disjoint), 0 = none finished yet
+
 //------------------------------------------------------------------------------------------------------------------------
 
 // Vertex buffers management
@@ -1159,6 +1168,7 @@ static rlFrameStats rlglFrameStats = { 0 };
 static unsigned int rlglLastProgramBound = 0;
 static rlBatchFlushCallback rlglOnBatchFlushBegin = NULL;
 static rlBatchFlushCallback rlglOnBatchFlushEnd = NULL;
+static void *rlglExtensionLoader = NULL;   // rlLoadExtensions()'s loader
 
 // Shader the render batch binds whenever the default shader is asked for (see rlSetBatchDefaultShader)
 static unsigned int rlglBatchDefaultShaderId = 0;
@@ -1700,6 +1710,129 @@ void rlSetBatchFlushCallbacks(rlBatchFlushCallback onBegin, rlBatchFlushCallback
 {
     rlglOnBatchFlushBegin = onBegin;
     rlglOnBatchFlushEnd = onEnd;
+}
+
+//----------------------------------------------------------------------------------
+// GPU timer (see rlGpuTimerBegin)
+// A ring of time elapsed queries: a result is only read once the driver reports it available, a few
+// frames after its query ended, so reading never waits for the GPU. While every query is still
+// waiting, rlGpuTimerBegin() skips measuring instead of reusing one.
+//----------------------------------------------------------------------------------
+#define RLGL_GPU_TIMER_QUERIES 4
+#ifndef GL_TIME_ELAPSED
+    #define GL_TIME_ELAPSED 0x88BF              // GL_TIME_ELAPSED_EXT has the same value
+#endif
+#ifndef GL_QUERY_RESULT
+    #define GL_QUERY_RESULT 0x8866
+#endif
+#ifndef GL_QUERY_RESULT_AVAILABLE
+    #define GL_QUERY_RESULT_AVAILABLE 0x8867
+#endif
+#ifndef GL_GPU_DISJOINT_EXT
+    #define GL_GPU_DISJOINT_EXT 0x8FBB
+#endif
+
+typedef void (*rlglGenQueriesFn)(int n, unsigned int *ids);
+typedef void (*rlglBeginQueryFn)(unsigned int target, unsigned int id);
+typedef void (*rlglEndQueryFn)(unsigned int target);
+typedef void (*rlglGetQueryObjectuivFn)(unsigned int id, unsigned int pname, unsigned int *params);
+typedef void (*rlglGetQueryObjectui64vFn)(unsigned int id, unsigned int pname, unsigned long long *params);
+
+static struct {
+    int support;                        // 0 = not checked yet, 1 = supported, -1 = not
+    rlglGenQueriesFn genQueries;
+    rlglBeginQueryFn beginQuery;
+    rlglEndQueryFn endQuery;
+    rlglGetQueryObjectuivFn getQueryObjectuiv;
+    rlglGetQueryObjectui64vFn getQueryObjectui64v;
+    unsigned int ids[RLGL_GPU_TIMER_QUERIES];
+    int head;                           // next query to begin
+    int tail;                           // oldest query waiting for its result
+    int waiting;                        // queries ended but not collected
+    bool running;
+} rlglGpuTimer = { 0 };
+
+bool rlGpuTimerIsSupported(void)
+{
+    if (rlglGpuTimer.support != 0) return (rlglGpuTimer.support > 0);
+    rlglGpuTimer.support = -1;
+
+#if defined(PLATFORM_WEB) || defined(__EMSCRIPTEN__)
+    // Browsers keep timer queries (EXT_disjoint_timer_query_webgl2) disabled against timing attacks
+#elif defined(GRAPHICS_API_OPENGL_33)
+    // Core since OpenGL 3.3 (ARB_timer_query), loaded by glad - absent on a GL 2.1 context
+    rlglGpuTimer.genQueries = (rlglGenQueriesFn)glad_glGenQueries;
+    rlglGpuTimer.beginQuery = (rlglBeginQueryFn)glad_glBeginQuery;
+    rlglGpuTimer.endQuery = (rlglEndQueryFn)glad_glEndQuery;
+    rlglGpuTimer.getQueryObjectuiv = (rlglGetQueryObjectuivFn)glad_glGetQueryObjectuiv;
+    rlglGpuTimer.getQueryObjectui64v = (rlglGetQueryObjectui64vFn)glad_glGetQueryObjectui64v;
+#elif defined(GRAPHICS_API_OPENGL_ES2)
+    // GL_EXT_disjoint_timer_query (Adreno, some Mali/PowerVR); its functions carry the EXT suffix
+    const char *extensions = (const char *)glGetString(GL_EXTENSIONS);
+    if ((extensions != NULL) && (strstr(extensions, "GL_EXT_disjoint_timer_query") != NULL) && (rlglExtensionLoader != NULL))
+    {
+        rlglLoadProc load = (rlglLoadProc)rlglExtensionLoader;
+        rlglGpuTimer.genQueries = (rlglGenQueriesFn)load("glGenQueriesEXT");
+        rlglGpuTimer.beginQuery = (rlglBeginQueryFn)load("glBeginQueryEXT");
+        rlglGpuTimer.endQuery = (rlglEndQueryFn)load("glEndQueryEXT");
+        rlglGpuTimer.getQueryObjectuiv = (rlglGetQueryObjectuivFn)load("glGetQueryObjectuivEXT");
+        rlglGpuTimer.getQueryObjectui64v = (rlglGetQueryObjectui64vFn)load("glGetQueryObjectui64vEXT");
+    }
+#endif
+
+    if ((rlglGpuTimer.genQueries != NULL) && (rlglGpuTimer.beginQuery != NULL) && (rlglGpuTimer.endQuery != NULL) &&
+        (rlglGpuTimer.getQueryObjectuiv != NULL) && (rlglGpuTimer.getQueryObjectui64v != NULL))
+    {
+        rlglGpuTimer.genQueries(RLGL_GPU_TIMER_QUERIES, rlglGpuTimer.ids);
+        rlglGpuTimer.support = 1;
+    }
+    TRACELOG(RL_LOG_INFO, "GL: GPU timer queries %s", (rlglGpuTimer.support > 0)? "supported" : "not supported");
+
+    return (rlglGpuTimer.support > 0);
+}
+
+bool rlGpuTimerBegin(void)
+{
+    if (!rlGpuTimerIsSupported() || rlglGpuTimer.running || (rlglGpuTimer.waiting >= RLGL_GPU_TIMER_QUERIES)) return false;
+
+    rlglGpuTimer.beginQuery(GL_TIME_ELAPSED, rlglGpuTimer.ids[rlglGpuTimer.head]);
+    rlglGpuTimer.running = true;
+    return true;
+}
+
+void rlGpuTimerEnd(void)
+{
+    if (!rlglGpuTimer.running) return;
+
+    rlglGpuTimer.endQuery(GL_TIME_ELAPSED);
+    rlglGpuTimer.running = false;
+    rlglGpuTimer.head = (rlglGpuTimer.head + 1)%RLGL_GPU_TIMER_QUERIES;
+    rlglGpuTimer.waiting++;
+}
+
+int rlGpuTimerCollect(double *outMs)
+{
+    if (rlglGpuTimer.waiting <= 0) return 0;
+
+    unsigned int id = rlglGpuTimer.ids[rlglGpuTimer.tail];
+    unsigned int available = 0;
+    rlglGpuTimer.getQueryObjectuiv(id, GL_QUERY_RESULT_AVAILABLE, &available);
+    if (!available) return 0;
+
+    unsigned long long nanoseconds = 0;
+    rlglGpuTimer.getQueryObjectui64v(id, GL_QUERY_RESULT, &nanoseconds);
+    rlglGpuTimer.tail = (rlglGpuTimer.tail + 1)%RLGL_GPU_TIMER_QUERIES;
+    rlglGpuTimer.waiting--;
+
+#if defined(GRAPHICS_API_OPENGL_ES2)
+    // The GPU's timing changed underneath (e.g. a frequency change): results since are unreliable
+    GLint disjoint = 0;
+    glGetIntegerv(GL_GPU_DISJOINT_EXT, &disjoint);
+    if (disjoint) return -1;
+#endif
+
+    if (outMs != NULL) *outMs = (double)nanoseconds/1000000.0;
+    return 1;
 }
 
 // Set current texture to use
@@ -2409,6 +2542,8 @@ void rlglClose(void)
 // NOTE: External loader function must be provided
 void rlLoadExtensions(void *loader)
 {
+    rlglExtensionLoader = loader;   // kept for functions loaded on first use (rlGpuTimer*)
+
 #if defined(GRAPHICS_API_OPENGL_33)     // Also defined for GRAPHICS_API_OPENGL_21
     // NOTE: glad is generated and contains only required OpenGL 3.3 Core extensions (and lower versions)
     if (gladLoadGL((GLADloadfunc)loader) == 0) TRACELOG(RL_LOG_WARNING, "GLAD: Cannot load OpenGL extensions");
