@@ -425,6 +425,19 @@ typedef struct rlRenderBatch {
     float currentDepth;         // Current depth value for next draw
 } rlRenderBatch;
 
+// GL submission counters, for profiling how well the render batch batches
+// NOTE: The counters only ever grow (from rlglInit on); a caller measures a frame or a span
+// of code as the difference between two rlGetFrameStats() results
+#define RLGL_HAS_FRAME_STATS 1
+typedef struct rlFrameStats {
+    unsigned int batchFlushes;      // rlDrawRenderBatch() calls that had vertex data to draw
+    unsigned int drawCalls;         // glDrawArrays/glDrawElements(+Instanced) calls, batch and direct
+    unsigned int programBinds;      // glUseProgram() calls with a program (not 0)
+    unsigned int programSwitches;   // ...of those, the ones binding another program than the previous bind
+    unsigned int batchVertices;     // vertices uploaded by batch flushes
+    unsigned int batchUploadBytes;  // bytes uploaded by batch flushes (glBufferSubData)
+} rlFrameStats;
+
 // OpenGL version
 typedef enum {
     RL_OPENGL_11 = 1,           // OpenGL 1.1
@@ -732,6 +745,7 @@ RLAPI void rlDrawRenderBatchActive(void);               // Update and draw inter
 RLAPI bool rlCheckRenderBatchLimit(int vCount);         // Check internal buffer overflow for a given number of vertex
 
 RLAPI void rlSetTexture(unsigned int id);               // Set current texture for render batch and check buffers limits
+RLAPI rlFrameStats rlGetFrameStats(void);               // Get the (ever growing) GL submission counters
 
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -1130,6 +1144,18 @@ static double rlCullDistanceFar = RL_CULL_DISTANCE_FAR;
 
 #if defined(GRAPHICS_API_OPENGL_33) || defined(GRAPHICS_API_OPENGL_ES2)
 static rlglData RLGL = { 0 };
+
+static rlFrameStats rlglFrameStats = { 0 };
+static unsigned int rlglLastProgramBound = 0;
+
+// Count a glUseProgram() call for rlGetFrameStats()
+static void rlglCountProgramBind(unsigned int id)
+{
+    if (id == 0) return;
+    rlglFrameStats.programBinds++;
+    if (id != rlglLastProgramBound) rlglFrameStats.programSwitches++;
+    rlglLastProgramBound = id;
+}
 #endif  // GRAPHICS_API_OPENGL_33 || GRAPHICS_API_OPENGL_ES2
 
 #if defined(GRAPHICS_API_OPENGL_ES2) && !defined(GRAPHICS_API_OPENGL_ES3)
@@ -1636,6 +1662,12 @@ void rlColor3f(float x, float y, float z)
 // Module Functions Definition - OpenGL style functions (common to 1.1, 3.3+, ES2)
 //--------------------------------------------------------------------------------------
 
+// Get the GL submission counters (they only ever grow, see rlFrameStats)
+rlFrameStats rlGetFrameStats(void)
+{
+    return rlglFrameStats;
+}
+
 // Set current texture to use
 void rlSetTexture(unsigned int id)
 {
@@ -1824,6 +1856,7 @@ void rlEnableShader(unsigned int id)
 {
 #if (defined(GRAPHICS_API_OPENGL_33) || defined(GRAPHICS_API_OPENGL_ES2))
     glUseProgram(id);
+    rlglCountProgramBind(id);
 #endif
 }
 
@@ -2923,6 +2956,10 @@ void rlDrawRenderBatch(rlRenderBatch *batch)
     // TODO: If no data changed on the CPU arrays --> No need to re-update GPU arrays (use a change detector flag?)
     if (RLGL.State.vertexCounter > 0)
     {
+        rlglFrameStats.batchFlushes++;
+        rlglFrameStats.batchVertices += RLGL.State.vertexCounter;
+        rlglFrameStats.batchUploadBytes += RLGL.State.vertexCounter*(3*sizeof(float) + 2*sizeof(float) + 3*sizeof(float) + 4*sizeof(unsigned char));
+
         // Activate elements VAO
         if (RLGL.ExtSupported.vao) glBindVertexArray(batch->vertexBuffer[batch->currentBuffer].vaoId);
 
@@ -2992,6 +3029,7 @@ void rlDrawRenderBatch(rlRenderBatch *batch)
         {
             // Set current shader and upload current MVP matrix
             glUseProgram(RLGL.State.currentShaderId);
+            rlglCountProgramBind(RLGL.State.currentShaderId);
 
             // Create modelview-projection matrix and upload to shader
             Matrix matMVP = rlMatrixMultiply(RLGL.State.modelview, RLGL.State.projection);
@@ -3069,6 +3107,7 @@ void rlDrawRenderBatch(rlRenderBatch *batch)
             {
                 // Bind current draw call texture, activated as GL_TEXTURE0 and bound to sampler2D texture0 by default
                 glBindTexture(GL_TEXTURE_2D, batch->draws[i].textureId);
+                rlglFrameStats.drawCalls++;
 
                 if ((batch->draws[i].mode == RL_LINES) || (batch->draws[i].mode == RL_TRIANGLES)) glDrawArrays(batch->draws[i].mode, vertexOffset, batch->draws[i].vertexCount);
                 else
@@ -3962,6 +4001,7 @@ void rlDisableVertexAttribute(unsigned int index)
 // Draw vertex array
 void rlDrawVertexArray(int offset, int count)
 {
+    rlglFrameStats.drawCalls++;
     glDrawArrays(GL_TRIANGLES, offset, count);
 }
 
@@ -3972,6 +4012,7 @@ void rlDrawVertexArrayElements(int offset, int count, const void *buffer)
     unsigned short *bufferPtr = (unsigned short *)buffer;
     if (offset > 0) bufferPtr += offset;
 
+    rlglFrameStats.drawCalls++;
     glDrawElements(GL_TRIANGLES, count, GL_UNSIGNED_SHORT, (const unsigned short *)bufferPtr);
 }
 
@@ -3979,6 +4020,7 @@ void rlDrawVertexArrayElements(int offset, int count, const void *buffer)
 void rlDrawVertexArrayInstanced(int offset, int count, int instances)
 {
 #if defined(GRAPHICS_API_OPENGL_33) || defined(GRAPHICS_API_OPENGL_ES2)
+    rlglFrameStats.drawCalls++;
     glDrawArraysInstanced(GL_TRIANGLES, offset, count, instances);
 #endif
 }
@@ -3991,6 +4033,7 @@ void rlDrawVertexArrayElementsInstanced(int offset, int count, const void *buffe
     unsigned short *bufferPtr = (unsigned short *)buffer;
     if (offset > 0) bufferPtr += offset;
 
+    rlglFrameStats.drawCalls++;
     glDrawElementsInstanced(GL_TRIANGLES, count, GL_UNSIGNED_SHORT, (const unsigned short *)bufferPtr, instances);
 #endif
 }
@@ -4743,6 +4786,7 @@ void rlLoadDrawQuad(void)
 
     // Draw quad
     glBindVertexArray(quadVAO);
+    rlglFrameStats.drawCalls++;
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glBindVertexArray(0);
 
@@ -4821,6 +4865,7 @@ void rlLoadDrawCube(void)
 
     // Draw cube
     glBindVertexArray(cubeVAO);
+    rlglFrameStats.drawCalls++;
     glDrawArrays(GL_TRIANGLES, 0, 36);
     glBindVertexArray(0);
 
