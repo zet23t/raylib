@@ -438,6 +438,13 @@ typedef struct rlFrameStats {
     unsigned int batchUploadBytes;  // bytes uploaded by batch flushes (glBufferSubData)
 } rlFrameStats;
 
+// Called right before and after every rlDrawRenderBatch() that has vertex data to draw, so a profiler
+// can time the flushes apart from the code that happened to trigger them
+#define RLGL_HAS_FLUSH_CALLBACKS 1
+// rlNormal3fRaw() and rlSetBatchDefaultShader() are available
+#define RLGL_HAS_BATCH_DEFAULT_SHADER 1
+typedef void (*rlBatchFlushCallback)(void);
+
 // OpenGL version
 typedef enum {
     RL_OPENGL_11 = 1,           // OpenGL 1.1
@@ -638,6 +645,7 @@ RLAPI void rlVertex2f(float x, float y);                // Define one vertex (po
 RLAPI void rlVertex3f(float x, float y, float z);       // Define one vertex (position) - 3 float
 RLAPI void rlTexCoord2f(float x, float y);              // Define one vertex (texture coordinate) - 2 float
 RLAPI void rlNormal3f(float x, float y, float z);       // Define one vertex (normal) - 3 float
+RLAPI void rlNormal3fRaw(float x, float y, float z);    // Define one vertex (normal) as is: not normalized, not transformed (for shaders using the normal as a data channel)
 RLAPI void rlColor4ub(unsigned char r, unsigned char g, unsigned char b, unsigned char a); // Define one vertex (color) - 4 byte
 RLAPI void rlColor3f(float x, float y, float z);        // Define one vertex (color) - 3 float
 RLAPI void rlColor4f(float x, float y, float z, float w); // Define one vertex (color) - 4 float
@@ -746,6 +754,7 @@ RLAPI bool rlCheckRenderBatchLimit(int vCount);         // Check internal buffer
 
 RLAPI void rlSetTexture(unsigned int id);               // Set current texture for render batch and check buffers limits
 RLAPI rlFrameStats rlGetFrameStats(void);               // Get the (ever growing) GL submission counters
+RLAPI void rlSetBatchFlushCallbacks(rlBatchFlushCallback onBegin, rlBatchFlushCallback onEnd); // Set (or clear with NULL) the batch flush callbacks
 
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -795,6 +804,7 @@ RLAPI void rlSetUniformMatrix(int locIndex, Matrix mat);                        
 RLAPI void rlSetUniformMatrices(int locIndex, const Matrix *mat, int count);    // Set shader value matrices
 RLAPI void rlSetUniformSampler(int locIndex, unsigned int textureId);           // Set shader value sampler
 RLAPI void rlSetShader(unsigned int id, int *locs);                             // Set shader currently active (id and locations)
+RLAPI void rlSetBatchDefaultShader(unsigned int id, int *locs);                 // Set the shader the render batch uses in place of the default shader (0 for the default shader again)
 
 // Compute shader management
 RLAPI unsigned int rlLoadComputeShaderProgram(unsigned int shaderId);           // Load compute shader program
@@ -1147,6 +1157,12 @@ static rlglData RLGL = { 0 };
 
 static rlFrameStats rlglFrameStats = { 0 };
 static unsigned int rlglLastProgramBound = 0;
+static rlBatchFlushCallback rlglOnBatchFlushBegin = NULL;
+static rlBatchFlushCallback rlglOnBatchFlushEnd = NULL;
+
+// Shader the render batch binds whenever the default shader is asked for (see rlSetBatchDefaultShader)
+static unsigned int rlglBatchDefaultShaderId = 0;
+static int *rlglBatchDefaultShaderLocs = NULL;
 
 // Count a glUseProgram() call for rlGetFrameStats()
 static void rlglCountProgramBind(unsigned int id)
@@ -1477,6 +1493,7 @@ void rlVertex2f(float x, float y) { glVertex2f(x, y); }
 void rlVertex3f(float x, float y, float z) { glVertex3f(x, y, z); }
 void rlTexCoord2f(float x, float y) { glTexCoord2f(x, y); }
 void rlNormal3f(float x, float y, float z) { glNormal3f(x, y, z); }
+void rlNormal3fRaw(float x, float y, float z) { glNormal3f(x, y, z); }
 void rlColor4ub(unsigned char r, unsigned char g, unsigned char b, unsigned char a) { glColor4ub(r, g, b, a); }
 void rlColor3f(float x, float y, float z) { glColor3f(x, y, z); }
 void rlColor4f(float x, float y, float z, float w) { glColor4f(x, y, z, w); }
@@ -1635,6 +1652,16 @@ void rlNormal3f(float x, float y, float z)
     RLGL.State.normalz = normalz;
 }
 
+// Define one vertex (normal) as is: unlike rlNormal3f() it is neither transformed nor normalized, so a
+// shader can use the normal attribute to carry data (e.g. a flag outside the unit range that no
+// rlNormal3f() normal can reach)
+void rlNormal3fRaw(float x, float y, float z)
+{
+    RLGL.State.normalx = x;
+    RLGL.State.normaly = y;
+    RLGL.State.normalz = z;
+}
+
 // Define one vertex (color)
 void rlColor4ub(unsigned char x, unsigned char y, unsigned char z, unsigned char w)
 {
@@ -1666,6 +1693,13 @@ void rlColor3f(float x, float y, float z)
 rlFrameStats rlGetFrameStats(void)
 {
     return rlglFrameStats;
+}
+
+// Set the callbacks around every batch flush that draws something (NULL for none)
+void rlSetBatchFlushCallbacks(rlBatchFlushCallback onBegin, rlBatchFlushCallback onEnd)
+{
+    rlglOnBatchFlushBegin = onBegin;
+    rlglOnBatchFlushEnd = onEnd;
 }
 
 // Set current texture to use
@@ -2950,6 +2984,10 @@ void rlUnloadRenderBatch(rlRenderBatch batch)
 void rlDrawRenderBatch(rlRenderBatch *batch)
 {
 #if defined(GRAPHICS_API_OPENGL_33) || defined(GRAPHICS_API_OPENGL_ES2)
+    // Only flushes that draw something are reported (the callbacks bracket the whole function)
+    bool isReportedFlush = (RLGL.State.vertexCounter > 0);
+    if (isReportedFlush && (rlglOnBatchFlushBegin != NULL)) rlglOnBatchFlushBegin();
+
     // Update batch vertex buffers
     //------------------------------------------------------------------------------------------------------------
     // NOTE: If there is not vertex data, buffers doesn't need to be updated (vertexCount > 0)
@@ -3182,6 +3220,8 @@ void rlDrawRenderBatch(rlRenderBatch *batch)
     // Change to next buffer in the list (in case of multi-buffering)
     batch->currentBuffer++;
     if (batch->currentBuffer >= batch->bufferCount) batch->currentBuffer = 0;
+
+    if (isReportedFlush && (rlglOnBatchFlushEnd != NULL)) rlglOnBatchFlushEnd();
 #endif
 }
 
@@ -4475,12 +4515,36 @@ void rlSetUniformSampler(int locIndex, unsigned int textureId)
 void rlSetShader(unsigned int id, int *locs)
 {
 #if defined(GRAPHICS_API_OPENGL_33) || defined(GRAPHICS_API_OPENGL_ES2)
+    if ((id == RLGL.State.defaultShaderId) && (rlglBatchDefaultShaderId != 0))
+    {
+        id = rlglBatchDefaultShaderId;
+        locs = rlglBatchDefaultShaderLocs;
+    }
+
     if (RLGL.State.currentShaderId != id)
     {
         rlDrawRenderBatch(RLGL.currentBatch);
         RLGL.State.currentShaderId = id;
         RLGL.State.currentShaderLocs = locs;
     }
+#endif
+}
+
+// Set the shader the render batch binds in place of the default shader, e.g. a superset of it that
+// also draws something else, so switching between the two never flushes the batch
+// NOTE: Only the batch is affected (rlSetShader: BeginShaderMode/EndShaderMode): rlGetShaderIdDefault(),
+// default materials and whatever else binds the default shader directly keep the real one. 0 undoes it
+void rlSetBatchDefaultShader(unsigned int id, int *locs)
+{
+#if defined(GRAPHICS_API_OPENGL_33) || defined(GRAPHICS_API_OPENGL_ES2)
+    unsigned int previousId = (rlglBatchDefaultShaderId != 0)? rlglBatchDefaultShaderId : RLGL.State.defaultShaderId;
+    bool isDefaultActive = (RLGL.State.currentShaderId == previousId);
+
+    rlglBatchDefaultShaderId = id;
+    rlglBatchDefaultShaderLocs = (id != 0)? locs : NULL;
+
+    // Whatever is drawn under the default shader from now on uses the new one
+    if (isDefaultActive) rlSetShader(RLGL.State.defaultShaderId, RLGL.State.defaultShaderLocs);
 #endif
 }
 
